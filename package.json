@@ -10,5 +10,8 @@
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0"
   }
 }
