@@ -1,0 +1,10 @@
+{
+  "name": "@civint/website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "civint-CA website and docs — hosted on GitHub Pages",
+  "scripts": {
+    "dev": "npx serve .",
+    "build": "echo 'Static site — nothing to build'"
+  }
+}

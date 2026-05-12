@@ -1,0 +1,14 @@
+{
+  "name": "civint-CA",
+  "private": true,
+  "description": "Civilian intelligence infrastructure for Canada — open data pipeline with MCP, citation verification, and trust scoring",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces"
+  }
+}

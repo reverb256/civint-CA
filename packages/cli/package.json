@@ -1,0 +1,21 @@
+{
+  "name": "@civint/cli",
+  "version": "0.1.0",
+  "description": "civint-CA CLI — ingest, verify, and query Canadian civilian intelligence data",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "civint": "./dist/civint.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build"
+  },
+  "dependencies": {
+    "@civint/pipeline-core": "*",
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,12 @@
+[project]
+name = "civint-mcp"
+version = "0.1.0"
+description = "MCP server for Canadian civilian intelligence data — search articles, query gov data, fact-check claims"
+requires-python = ">=3.11"
+license = "MIT"
+
+[project.scripts]
+civint-mcp = "civint_mcp.server:main"
+
+[tool.mypy]
+strict = true

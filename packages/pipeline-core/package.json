@@ -1,0 +1,27 @@
+{
+  "name": "@civint/pipeline-core",
+  "version": "0.1.0",
+  "description": "Core data pipeline for civilian intelligence — ingestion, curation, verification, and audit",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./ingestion": "./dist/ingestion/index.js",
+    "./curation": "./dist/curation/index.js",
+    "./verification": "./dist/verification/index.js",
+    "./analysis": "./dist/analysis/index.js",
+    "./audit": "./dist/audit/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "typescript": "^5.7.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}
