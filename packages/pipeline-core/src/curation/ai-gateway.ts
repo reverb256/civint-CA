@@ -1,43 +1,84 @@
 /**
- * AI Gateway — generic OpenAI-compatible API client with caching and retry
+ * AI Gateway — connect to Carnice 3090 MoE or any OpenAI-compatible endpoint
+ *
+ * Handles reasoning models where content may be in reasoning_content field
+ * and strips markdown code fences from JSON responses.
  */
-import type { Article, ArticleInsights, BiasAnalysis, CurationResult } from '../types.js';
-import { CURATION_PROMPT, INSIGHTS_PROMPT, BIAS_ANALYSIS_PROMPT } from './prompts.js';
-import { evaluateThresholds, getDefaultCuration } from './scoring.js';
-import { hashString } from '../ingestion/rss.js';
 
 export interface AIGatewayConfig {
   endpoint: string;
   model: string;
-  apiKey?: string;
-  /** KV-style cache interface */
-  cache: {
-    get(key: string): Promise<string | null>;
-    put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
+  apiKey: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface AIResponse {
+  /** The assistant's response content (may be empty if reasoning-only output) */
+  content: string;
+  /** Thinking/reasoning block (Carnice with --reasoning) */
+  reasoningContent?: string;
+  model: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  timings: {
+    promptMs: number;
+    predictedMs: number;
+    predictedPerSecond: number;
   };
 }
 
 /**
- * Query the AI gateway with retry logic for rate limiting
+ * Get usable text content, preferring content field but falling back
+ * to reasoning_content for reasoning models.
  */
-async function queryAI(
+export function getResponseText(response: AIResponse): string {
+  if (response.content && response.content.trim()) {
+    return stripMarkdownFences(response.content.trim());
+  }
+  if (response.reasoningContent && response.reasoningContent.trim()) {
+    return stripMarkdownFences(response.reasoningContent.trim());
+  }
+  return '';
+}
+
+/**
+ * Strip markdown code fences (```json ... ``` or ``` ... ```) from text
+ */
+function stripMarkdownFences(text: string): string {
+  return text.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+}
+
+/**
+ * Query an OpenAI-compatible API (llama.cpp, vLLM, etc.)
+ */
+export async function queryAI(
   config: AIGatewayConfig,
-  prompt: string,
-  temperature: number = 0.3,
-  maxTokens: number = 1024
-): Promise<any> {
+  messages: { role: string; content: string }[],
+  options?: {
+    responseFormat?: { type: string };
+    temperature?: number;
+    /** Override max tokens. Default 4096 to accommodate reasoning models. */
+    maxTokens?: number;
+  }
+): Promise<AIResponse> {
+  const maxTokens = options?.maxTokens ?? config.maxTokens ?? 4096;
+
   const response = await fetch(`${config.endpoint}/chat/completions`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${config.apiKey || 'none'}`,
       'Content-Type': 'application/json',
+      ...(config.apiKey ? { 'Authorization': `Bearer ${config.apiKey}` } : {}),
     },
     body: JSON.stringify({
       model: config.model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature,
+      messages,
+      temperature: options?.temperature ?? config.temperature ?? 0.3,
       max_tokens: maxTokens,
-      response_format: { type: 'json_object' },
+      ...(options?.responseFormat ? { response_format: options.responseFormat } : {}),
     }),
   });
 
@@ -47,109 +88,21 @@ async function queryAI(
   }
 
   const data: any = await response.json();
-  return JSON.parse(data.choices[0].message.content);
-}
+  const choice = data.choices?.[0]?.message;
 
-/**
- * Analyze an article for Canadian relevance and curation scoring
- */
-export async function analyzeArticle(
-  config: AIGatewayConfig,
-  article: Article
-): Promise<CurationResult> {
-  const cacheKey = hashString(article.url);
-
-  // Check cache
-  const cached = await config.cache.get(`curation:${cacheKey}`);
-  if (cached) return JSON.parse(cached) as CurationResult;
-
-  const prompt = `${CURATION_PROMPT}
-
-Title: ${article.title}
-Summary: ${article.summary}
-Source: ${article.source}`;
-
-  try {
-    const result = await queryAI(config, prompt, 0.3, 1024) as CurationResult;
-
-    // Set shouldReject based on thresholds
-    result.shouldReject = !evaluateThresholds(result);
-    result.totalScore = result.totalScore || Math.round(
-      result.canadianRelevance * 0.35 +
-      result.accountabilityValue * 0.30 +
-      result.missionAlignment * 0.20 +
-      result.sourceQuality * 0.10 +
-      result.urgency * 0.05
-    );
-
-    // Cache for 7 days
-    await config.cache.put(`curation:${cacheKey}`, JSON.stringify(result), {
-      expirationTtl: 7 * 24 * 60 * 60,
-    });
-
-    return result;
-  } catch (error) {
-    console.error('AI analysis failed:', (error as Error).message);
-    return getDefaultCuration(article.category);
-  }
-}
-
-/**
- * Generate insights for an article
- */
-export async function generateInsights(
-  config: AIGatewayConfig,
-  article: any
-): Promise<ArticleInsights> {
-  const prompt = `${INSIGHTS_PROMPT}
-
-Title: ${article.title}
-Summary: ${article.summary}
-Source: ${article.source}
-Content: ${(article.content || '').slice(0, 3000)}`;
-
-  try {
-    return await queryAI(config, prompt, 0.4, 1500) as ArticleInsights;
-  } catch (error) {
-    console.error('Insights generation failed:', (error as Error).message);
-    return {
-      summary: article.summary || 'No summary available',
-      keyPoints: [article.title],
-      stakeholders: [],
-      implications: [],
-      whatNext: [],
-      readingTime: 3,
-      complexity: 'medium',
-    };
-  }
-}
-
-/**
- * Generate bias analysis for an article
- */
-export async function generateBiasAnalysis(
-  config: AIGatewayConfig,
-  article: any
-): Promise<BiasAnalysis> {
-  const prompt = `${BIAS_ANALYSIS_PROMPT}
-
-Title: ${article.title}
-Summary: ${article.summary}
-Source: ${article.source}
-Content: ${(article.content || '').slice(0, 3000)}`;
-
-  try {
-    return await queryAI(config, prompt, 0.4, 1500) as BiasAnalysis;
-  } catch (error) {
-    console.error('Bias analysis failed:', (error as Error).message);
-    return {
-      overallBias: 'center',
-      biasScore: 0,
-      confidence: 0,
-      framing: { language: [], tone: 'unknown', perspective: 'unknown' },
-      whatMissing: [],
-      contextGaps: [],
-      alternativePerspectives: [],
-    };
-  }
+  return {
+    content: choice?.content || '',
+    reasoningContent: choice?.reasoning_content,
+    model: data.model || config.model,
+    usage: {
+      promptTokens: data.usage?.prompt_tokens || 0,
+      completionTokens: data.usage?.completion_tokens || 0,
+      totalTokens: data.usage?.total_tokens || 0,
+    },
+    timings: {
+      promptMs: data.timings?.prompt_ms || 0,
+      predictedMs: data.timings?.predicted_ms || 0,
+      predictedPerSecond: data.timings?.predicted_per_second || 0,
+    },
+  };
 }

@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 export * from './types.js';
+export * from './pipeline.js';
 export * as ingestion from './ingestion/index.js';
 export * as curation from './curation/index.js';
 export * as verification from './verification/index.js';

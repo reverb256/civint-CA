@@ -1,9 +1,10 @@
-node_modules/
-dist/
-.wrangler/
-.dev.vars
-*.log
-.DS_Store
+civint-spike.db
 coverage/
+.dev.vars
+dist/
+.DS_Store
 .env
 .env.local
+*.log
+node_modules/
+.wrangler/

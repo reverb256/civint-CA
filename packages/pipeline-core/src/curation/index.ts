@@ -1,4 +1,9 @@
-export { CURATION_PROMPT, INSIGHTS_PROMPT, BIAS_ANALYSIS_PROMPT } from './prompts.js';
-export { calculateTrustScore, evaluateThresholds, getDefaultCuration, THRESHOLDS } from './scoring.js';
-export { analyzeArticle, generateInsights, generateBiasAnalysis } from './ai-gateway.js';
-export type { AIGatewayConfig } from './ai-gateway.js';
+export { queryAI } from './ai-gateway.js';
+export type { AIGatewayConfig, AIResponse } from './ai-gateway.js';
+export {
+  CURATION_PROMPT,
+  THRESHOLDS,
+  calculateTrustScore,
+  evaluateThresholds,
+  getDefaultCuration,
+} from './scoring.js';

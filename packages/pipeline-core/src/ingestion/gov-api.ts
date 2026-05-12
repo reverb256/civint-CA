@@ -1,19 +1,21 @@
 /**
- * Government API ingestion module — StatCan WDS, CKAN portals, Katzilla bridge
+ * Government API ingestion — StatCan, open.canada.ca CKAN, etc.
  */
+
+/** A government data release */
 export interface GovRelease {
   source: string;
   title: string;
-  description?: string;
-  release_date?: string;
-  data_url?: string;
+  description: string | null;
+  releaseDate: string | null;
+  dataUrl: string | null;
   jurisdiction: string;
-  category?: string;
+  category: string | null;
 }
 
-/** CKAN portal configuration */
-const CKAN_PORTALS: Record<string, string> = {
-  federal: 'https://open.canada.ca/data/en/api/3/action',
+/** Default CKAN portals by jurisdiction */
+export const CKAN_PORTALS: Record<string, string> = {
+  federal: 'https://open.canada.ca/data/api/3/action',
   ontario: 'https://data.ontario.ca/api/3/action',
   bc: 'https://catalogue.data.gov.bc.ca/api/3/action',
   alberta: 'https://open.alberta.ca/api/3/action',
@@ -21,60 +23,38 @@ const CKAN_PORTALS: Record<string, string> = {
 };
 
 /**
- * Fetch packages from a CKAN portal
+ * Fetch recent packages from a CKAN portal
  */
 export async function fetchCKANPackages(
-  jurisdiction: string,
-  rows: number = 50,
-  offset: number = 0
-): Promise<any[]> {
+  jurisdiction: string = 'federal',
+  limit: number = 10
+): Promise<GovRelease[]> {
   const baseUrl = CKAN_PORTALS[jurisdiction];
   if (!baseUrl) throw new Error(`Unknown jurisdiction: ${jurisdiction}`);
 
-  const url = `${baseUrl}/package_search?rows=${rows}&start=${offset}&sort=metadata_modified+desc`;
-  const response = await fetch(url);
+  const url = `${baseUrl}/package_search?rows=${limit}&sort=metadata_modified+desc`;
 
-  if (!response.ok) throw new Error(`CKAN error ${response.status} for ${jurisdiction}`);
-
-  const data: any = await response.json();
-  return data.result?.results || [];
-}
-
-/**
- * Fetch releases from Statistics Canada WDS
- */
-export async function fetchStatCanReleases(): Promise<GovRelease[]> {
-  const response = await fetch('https://www150.statcan.gc.ca/t1/wds/rest/getLatestDataUpdates', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ productType: 10, count: 50 }),
+  const response = await fetch(url, {
+    headers: { 'User-Agent': 'civint-CA/0.1.0' },
   });
 
-  if (!response.ok) throw new Error(`StatCan WDS error: ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`CKAN fetch failed: ${response.status}`);
+  }
 
   const data: any = await response.json();
-  return (data.object || []).map((item: any) => ({
-    source: 'statcan',
-    title: item.productName || 'StatCan Data Update',
-    description: `Cube ID: ${item.productId}, Release: ${item.releaseDate}`,
-    release_date: item.releaseDate,
-    data_url: `https://www150.statcan.gc.ca/t1/wds/rest/getFullTableDownload/${item.productId}`,
-    jurisdiction: 'federal',
-    category: 'data',
-  }));
-}
 
-/**
- * Normalize CKAN results into GovRelease format
- */
-export function normalizeCKANRelease(pkg: any, jurisdiction: string): GovRelease {
-  return {
-    source: `ckan-${jurisdiction}`,
-    title: pkg.title || 'Untitled Dataset',
-    description: pkg.notes || '',
-    release_date: pkg.metadata_modified?.split('T')[0] || null,
-    data_url: pkg.resources?.[0]?.url || null,
+  if (!data.success || !data.result?.results) {
+    return [];
+  }
+
+  return data.result.results.map((pkg: any) => ({
+    source: `open.canada.ca (${jurisdiction})`,
+    title: pkg.title || pkg.name || 'Untitled',
+    description: pkg.notes || pkg.title || null,
+    releaseDate: pkg.metadata_modified || null,
+    dataUrl: `https://open.canada.ca/data/dataset/${pkg.name}`,
     jurisdiction,
-    category: pkg.organization?.name || 'government',
-  };
+    category: (pkg.groups || []).map((g: any) => g.display_name).join(', ') || null,
+  }));
 }
